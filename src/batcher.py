@@ -26,9 +26,21 @@ from threading import Thread
 import time
 import numpy as np
 import tensorflow as tf
+import tensorflow_hub as hub
+import bert
+from bert import run_classifier
+from bert import optimization
+from bert import tokenization
 import data
 
 FLAGS = tf.app.flags.FLAGS
+
+
+BERT_MODEL = 'uncased_L-12_H-768_A-12'
+BERT_MODEL_HUB = 'https://tfhub.dev/google/bert_' + BERT_MODEL + '/1'
+
+tokenizer = run_classifier_with_tfhub.create_tokenizer_from_hub_module(BERT_MODEL_HUB)
+
 
 class Example(object):
   """Class representing a train/val/test example for text summarization."""
@@ -45,20 +57,25 @@ class Example(object):
     self.hps = hps
 
     # Get ids of special tokens
-    start_decoding = vocab.word2id(data.START_DECODING)
-    stop_decoding = vocab.word2id(data.STOP_DECODING)
+    #start_decoding = vocab.word2id(data.START_DECODING)
+    #stop_decoding = vocab.word2id(data.STOP_DECODING)
+    start_decoding = tokenizer.convert_tokens_to_ids([data.START_DECODING])[0]
+    stop_decoding = tokenizer.convert_tokens_to_ids([data.STOP_DECODING])[0]
 
     # Process the article
     article_words = article.split()
     if len(article_words) > hps.max_enc_steps:
       article_words = article_words[:hps.max_enc_steps]
-    self.enc_len = len(article_words) # store the length after truncation but before padding
-    self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
+    self.enc_len = len(article_words)+2 # store the length after truncation but before padding
+    self.enc_input = tokenizer.convert_tokens_to_ids(['[CLS]']+article_words+['[SEP]'])
+    #self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
 
     # Process the abstract
     abstract = ' '.join(abstract_sentences) # string
     abstract_words = abstract.split() # list of strings
-    abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
+    #abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
+
+    abs_ids = tokenizer.convert_tokens_to_ids(['[CLS]']+abstract_words+['[SEP]'])
 
     # Get the decoder input sequence and target sequence
     self.dec_input, self.target = self.get_dec_inp_targ_seqs(abs_ids, hps.max_dec_steps, start_decoding, stop_decoding)
@@ -75,10 +92,15 @@ class Example(object):
       # Overwrite decoder target sequence so it uses the temp article OOV ids
       _, self.target = self.get_dec_inp_targ_seqs(abs_ids_extend_vocab, hps.max_dec_steps, start_decoding, stop_decoding)
 
+
+    # input mask and segment id
+    self.input_mask = []
+
     # Store the original strings
     self.original_article = article
     self.original_abstract = abstract
     self.original_abstract_sents = abstract_sentences
+
 
 
   def get_dec_inp_targ_seqs(self, sequence, max_len, start_id, stop_id):
@@ -160,7 +182,9 @@ class Batch(object):
 
     # Pad the encoder input sequences up to the length of the longest sequence
     for ex in example_list:
+      enc_len = ex.enc_len
       ex.pad_encoder_input(max_enc_seq_len, self.pad_id)
+      ex.input_mask = [1]*enc_len+[0]*(max_enc_seq_len - enc_len)
 
     # Initialize the numpy arrays
     # Note: our enc_batch can have different length (second dimension) for each batch because we use dynamic_rnn for the encoder.
