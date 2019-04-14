@@ -34,6 +34,8 @@ UNKNOWN_TOKEN = '[UNK]' # This has a vocab id, which is used to represent out-of
 START_DECODING = '[CLS]' # This has a vocab id, which is used at the start of every decoder input sequence
 STOP_DECODING = '[SEP]' # This has a vocab id, which is used at the end of untruncated target sequences
 
+
+
 # Note: none of <s>, </s>, [PAD], [UNK], [START], [STOP] should appear in the vocab file.
 
 
@@ -173,6 +175,23 @@ def example_generator(data_path, single_pass):
       print("example_generator completed reading all datafiles. No more data.")
       break
 
+def article2ids_bert(article_words, tokenizer):
+
+  ids = []
+  oovs = []
+  vocab_size = len(tokenizer.vocab)
+  unk_id = tokenizer.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
+
+  for w in article_words:
+    try:
+      i = tokenizer.convert_tokens_to_ids([w])[0]
+      ids.append(i)
+    except:
+      if w not in oovs: # Add to list of OOVs
+        oovs.append(w)
+      oov_num = oovs.index(w) # This is 0 for the first article OOV, 1 for the second article OOV...
+      ids.append(vocab_size + oov_num) # This is e.g. 50000 for the first article OOV, 50001 for the second...
+  return ids, oovs
 
 def article2ids(article_words, vocab):
   """Map the article words to their ids. Also return a list of OOVs in the article.
@@ -200,6 +219,23 @@ def article2ids(article_words, vocab):
       ids.append(i)
   return ids, oovs
 
+
+def abstract2ids_bert(abstract_words, tokenizer, article_oovs):
+  ids = []
+  vocab_size = len(tokenizer.vocab)
+  unk_id = tokenizer.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
+
+  for w in abstract_words:
+    try:
+      i = tokenizer.convert_tokens_to_ids([w])[0]
+      ids.append(i)
+    except:
+      if w in article_oovs: # If w is an in-article OOV
+        vocab_idx = vocab_size + article_oovs.index(w) # Map to its temporary article OOV number
+        ids.append(vocab_idx)
+      else: # If w is an out-of-article OOV
+        ids.append(unk_id) # Map to the UNK token id
+  return ids
 
 def abstract2ids(abstract_words, vocab, article_oovs):
   """Map the abstract words to their ids. In-article OOVs are mapped to their temporary OOV numbers.
@@ -240,10 +276,11 @@ def outputids2words(id_list, vocab, article_oovs):
   words = []
   for i in id_list:
     try:
-      w = vocab.id2word(i) # might be [UNK]
+      w = vocab.convert_ids_to_tokens([i])[0]
+      #w = vocab.id2word(i) # might be [UNK]
     except ValueError as e: # w is OOV
       assert article_oovs is not None, "Error: model produced a word ID that isn't in the vocabulary. This should not happen in baseline (no pointer-generator) mode"
-      article_oov_idx = i - vocab.size()
+      article_oov_idx = i - len(vocab.vocab)
       try:
         w = article_oovs[article_oov_idx]
       except ValueError as e: # i doesn't correspond to an article oov
@@ -278,9 +315,16 @@ def abstract2sents(abstract):
 
 def show_art_oovs(article, vocab):
   """Returns the article string, highlighting the OOVs by placing __underscores__ around them"""
-  unk_token = vocab.word2id(UNKNOWN_TOKEN)
+  #unk_token = vocab.word2id(UNKNOWN_TOKEN)
+  unk_token = vocab.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
   words = article.split(' ')
-  words = [("__%s__" % w) if vocab.word2id(w)==unk_token else w for w in words]
+  words = [("__%s__" % w) if vocab.convert_tokens_to_ids([w])[0]==unk_token else w for w in words]
+  for (i, w) in enumerate(words):
+    try:
+      id_b = vocab.convert_tokens_to_ids([w])[0]
+      words[i] = w
+    except:
+      words[i] = ("__%s__" % w)
   out_str = ' '.join(words)
   return out_str
 
@@ -295,11 +339,14 @@ def show_abs_oovs(abstract, vocab, article_oovs):
     vocab: Vocabulary object
     article_oovs: list of words (strings), or None (in baseline mode)
   """
-  unk_token = vocab.word2id(UNKNOWN_TOKEN)
+  unk_token = vocab.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
   words = abstract.split(' ')
   new_words = []
   for w in words:
-    if vocab.word2id(w) == unk_token: # w is oov
+    try:
+      ids = vocab.convert_tokens_to_ids([w])[0]
+      new_words.append(w)
+    except:
       if article_oovs is None: # baseline mode
         new_words.append("__%s__" % w)
       else: # pointer-generator mode
@@ -307,7 +354,15 @@ def show_abs_oovs(abstract, vocab, article_oovs):
           new_words.append("__%s__" % w)
         else:
           new_words.append("!!__%s__!!" % w)
-    else: # w is in-vocab word
-      new_words.append(w)
+    # if vocab.convert_tokens_to_ids([w])[0] == unk_token: # w is oov
+    #   if article_oovs is None: # baseline mode
+    #     new_words.append("__%s__" % w)
+    #   else: # pointer-generator mode
+    #     if w in article_oovs:
+    #       new_words.append("__%s__" % w)
+    #     else:
+    #       new_words.append("!!__%s__!!" % w)
+    # else: # w is in-vocab word
+    #   new_words.append(w)
   out_str = ' '.join(new_words)
   return out_str

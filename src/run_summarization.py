@@ -36,6 +36,11 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.distributions import bernoulli
+import tensorflow_hub as hub
+import bert
+from bert import run_classifier
+from bert import optimization
+from bert import tokenization
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -59,8 +64,8 @@ tf.app.flags.DEFINE_integer('batch_queue_threads', 2, 'Number of batch queue thr
 tf.app.flags.DEFINE_integer('bucketing_cache_size', 100, 'Number of bucketing cache size.')
 
 # Hyperparameters
-tf.app.flags.DEFINE_integer('enc_hidden_dim', 256, 'dimension of RNN hidden states')
-tf.app.flags.DEFINE_integer('dec_hidden_dim', 256, 'dimension of RNN hidden states')
+tf.app.flags.DEFINE_integer('enc_hidden_dim', 768, 'dimension of RNN hidden states')
+tf.app.flags.DEFINE_integer('dec_hidden_dim', 768, 'dimension of RNN hidden states')
 tf.app.flags.DEFINE_integer('emb_dim', 128, 'dimension of word embeddings')
 tf.app.flags.DEFINE_integer('batch_size', 64, 'minibatch size')
 tf.app.flags.DEFINE_integer('max_enc_steps', 400, 'max timesteps of encoder (max source text tokens)')
@@ -284,8 +289,13 @@ class Seq2Seq(object):
 
     # Loads pre-trained word-embedding. By default the model learns the embedding.
     if FLAGS.embedding:
-      self.vocab.LoadWordEmbedding(FLAGS.embedding, FLAGS.emb_dim)
-      word_vector = self.vocab.getWordEmbedding()
+      #self.vocab.LoadWordEmbedding(FLAGS.embedding, FLAGS.emb_dim)
+      #word_vector = self.vocab.getWordEmbedding()
+      word_vector = self.bert_encoder.variable_map['bert/embeddings/word_embeddings']
+
+      with tf.Session() as embed_sess :
+        sess.run(tf.global_variables_initializer())
+        word_vector = sess.run(word_vector)
 
     self.sv = tf.train.Supervisor(logdir=train_dir,
                        is_chief=True,
@@ -675,7 +685,11 @@ class Seq2Seq(object):
       fw.write('{}\t{}\n'.format(k, v))
     fw.close()
 
-    self.vocab = Vocab(FLAGS.vocab_path, FLAGS.vocab_size) # create a vocabulary
+    #self.vocab = Vocab(FLAGS.vocab_path, FLAGS.vocab_size) # create a vocabulary
+    BERT_MODEL = 'uncased_L-12_H-768_A-12'
+    BERT_MODEL_HUB = 'https://tfhub.dev/google/bert_' + BERT_MODEL + '/1'
+    self.vocab = run_classifier_with_tfhub.create_tokenizer_from_hub_module(BERT_MODEL_HUB)
+    self.bert_encoder = hub.Module(BERT_MODEL_HUB,trainable=True)
 
     # If in decode mode, set batch_size = beam_size
     # Reason: in decode mode, we decode one example at a time.
@@ -726,7 +740,7 @@ class Seq2Seq(object):
         if key in hparam_list: # if it's in the list
           hps_dict[key] = val.value # add it to the dict
       hps_dict.update({'dqn_input_feature_len':(FLAGS.dec_hidden_dim)})
-      hps_dict.update({'vocab_size':self.vocab.size()})
+      hps_dict.update({'vocab_size':len(self.vocab.vocab)})
       self.dqn_hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
 
     # Create a batcher object that will create minibatches of data
@@ -736,7 +750,7 @@ class Seq2Seq(object):
 
     if self.hps.mode == 'train':
       print("creating model...")
-      self.model = SummarizationModel(self.hps, self.vocab)
+      self.model = SummarizationModel(self.hps, self.vocab, self.bert_encoder)
       if FLAGS.ac_training:
         # current DQN with paramters \Psi
         self.dqn = DQN(self.dqn_hps,'current')

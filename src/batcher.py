@@ -45,7 +45,7 @@ tokenizer = run_classifier_with_tfhub.create_tokenizer_from_hub_module(BERT_MODE
 class Example(object):
   """Class representing a train/val/test example for text summarization."""
 
-  def __init__(self, article, abstract_sentences, vocab, hps):
+  def __init__(self, article, abstract_sentences, tokenizer, hps):
     """Initializes the Example, performing tokenization and truncation to produce the encoder, decoder and target sequences, which are stored in self.
 
     Args:
@@ -67,16 +67,30 @@ class Example(object):
     if len(article_words) > hps.max_enc_steps:
       article_words = article_words[:hps.max_enc_steps]
     self.enc_len = len(article_words)+2 # store the length after truncation but before padding
-    self.enc_input = tokenizer.convert_tokens_to_ids(['[CLS]']+article_words+['[SEP]'])
+    self.enc_input = []
+    unk_id = tokenizer.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
+    for w in article_words:
+      try:
+        i = tokenizer.convert_tokens_to_ids([w])[0]:
+        enc_input.append(i)
+      except:
+        enc_input.append(unk_id)
+    self.enc_input = tokenizer.convert_tokens_to_ids(['[CLS]'])+self.enc_input+tokenizer.convert_tokens_to_ids(['[SEP]'])
     #self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
 
     # Process the abstract
     abstract = ' '.join(abstract_sentences) # string
     abstract_words = abstract.split() # list of strings
     #abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
+    abd_ids = []
 
-    abs_ids = tokenizer.convert_tokens_to_ids(['[CLS]']+abstract_words+['[SEP]'])
-
+    for w in abstract_words:
+      try:
+        i = tokenizer.convert_tokens_to_ids([w])[0]:
+        abd_ids.append(i)
+      except:
+        abd_ids.append(unk_id)
+        
     # Get the decoder input sequence and target sequence
     self.dec_input, self.target = self.get_dec_inp_targ_seqs(abs_ids, hps.max_dec_steps, start_decoding, stop_decoding)
     self.dec_len = len(self.dec_input)
@@ -84,17 +98,16 @@ class Example(object):
     # If using pointer-generator mode, we need to store some extra info
     if hps.pointer_gen:
       # Store a version of the enc_input where in-article OOVs are represented by their temporary OOV id; also store the in-article OOVs words themselves
-      self.enc_input_extend_vocab, self.article_oovs = data.article2ids(article_words, vocab)
+      #self.enc_input_extend_vocab, self.article_oovs = data.article2ids(article_words, vocab)
+      self.enc_input_extend_vocab, self.article_oovs = data.article2ids_bert(article_words, tokenizer)
 
       # Get a verison of the reference summary where in-article OOVs are represented by their temporary article OOV id
-      abs_ids_extend_vocab = data.abstract2ids(abstract_words, vocab, self.article_oovs)
+      #abs_ids_extend_vocab = data.abstract2ids(abstract_words, vocab, self.article_oovs)
+      abs_ids_extend_vocab = data.abstract2ids_bert(abstract_words, tokenizer, self.article_oovs)
 
       # Overwrite decoder target sequence so it uses the temp article OOV ids
       _, self.target = self.get_dec_inp_targ_seqs(abs_ids_extend_vocab, hps.max_dec_steps, start_decoding, stop_decoding)
 
-
-    # input mask and segment id
-    self.input_mask = []
 
     # Store the original strings
     self.original_article = article
@@ -147,7 +160,7 @@ class Example(object):
 class Batch(object):
   """Class representing a minibatch of train/val/test examples for text summarization."""
 
-  def __init__(self, example_list, hps, vocab):
+  def __init__(self, example_list, hps, tokenizer):
     """Turns the example_list into a Batch object.
 
     Args:
@@ -155,7 +168,8 @@ class Batch(object):
        hps: hyperparameters
        vocab: Vocabulary object
     """
-    self.pad_id = vocab.word2id(data.PAD_TOKEN) # id of the PAD token used to pad sequences
+    #self.pad_id = vocab.word2id(data.PAD_TOKEN) # id of the PAD token used to pad sequences
+    self.pad_id = tokenizer.convert_tokens_to_ids([data.PAD_TOKEN])[0]
     self.init_encoder_seq(example_list, hps) # initialize the input to the encoder
     self.init_decoder_seq(example_list, hps) # initialize the input and targets for the decoder
     self.store_orig_strings(example_list) # store the original strings
@@ -184,11 +198,11 @@ class Batch(object):
     for ex in example_list:
       enc_len = ex.enc_len
       ex.pad_encoder_input(max_enc_seq_len, self.pad_id)
-      ex.input_mask = [1]*enc_len+[0]*(max_enc_seq_len - enc_len)
 
     # Initialize the numpy arrays
     # Note: our enc_batch can have different length (second dimension) for each batch because we use dynamic_rnn for the encoder.
     self.enc_batch = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.int32)
+    self.enc_segments = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.int32)
     self.enc_lens = np.zeros((hps.batch_size), dtype=np.int32)
     self.enc_padding_mask = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.float32)
 
@@ -248,7 +262,7 @@ class Batcher(object):
 
   BATCH_QUEUE_MAX = 100 # max number of batches the batch_queue can hold
 
-  def __init__(self, data_path, vocab, hps, single_pass, decode_after):
+  def __init__(self, data_path, tokenizer, hps, single_pass, decode_after):
     """Initialize the batcher. Start threads that process the data into batches.
 
     Args:
@@ -258,7 +272,7 @@ class Batcher(object):
       single_pass: If True, run through the dataset exactly once (useful for when you want to run evaluation on the dev or test set). Otherwise generate random batches indefinitely (useful for training).
     """
     self._data_path = data_path
-    self._vocab = vocab
+    self._vocab = tokenizer
     self._hps = hps
     self._single_pass = single_pass
     self._decode_after = decode_after
