@@ -135,11 +135,21 @@ def attention_decoder(_hps,
     temporal_e: contains temporal attention.
   """
   with variable_scope.variable_scope("attention_decoder") as scope:
-    batch_size = _enc_states.get_shape()[0] # if this line fails, it's because the batch size isn't defined
+    #batch_size = _enc_states.get_shape()[0] # if this line fails, it's because the batch size isn't defined
+    batch_size = FLAGS.batch_size
     attn_size = _enc_states.get_shape()[2] # if this line fails, it's because the attention length isn't defined
     emb_size = emb_dec_inputs[0].get_shape()[1] # if this line fails, it's because the embedding isn't defined
     decoder_attn_size = _dec_in_state.c.get_shape()[1]
+    
+    enc_padding_mask_f = tf.cast(enc_padding_mask, tf.float32)
+    
     tf.logging.info("batch_size %i, attn_size: %i, emb_size: %i", batch_size, attn_size, emb_size)
+    
+    
+    #print("batch_size", _enc_states.get_shape())
+    #print("emb_size", emb_size)
+    #print("decod_attn_size", decoder_attn_size)
+    
     # Reshape _enc_states (need to insert a dim)
     _enc_states = tf.expand_dims(_enc_states, axis=2) # now is shape (batch_size, max_enc_steps, 1, attn_size)
 
@@ -197,7 +207,7 @@ def attention_decoder(_hps,
           coverage_features = nn_ops.conv2d(coverage, w_c, [1, 1, 1, 1], "SAME") # c has shape (batch_size, max_enc_steps, 1, attention_vec_size)
           # Calculate v^T tanh(W_h h_i + W_s s_t + w_c c_i^t + b_attn)
           e_not_masked = math_ops.reduce_sum(v * math_ops.tanh(encoder_features + decoder_features + coverage_features), [2, 3])  # shape (batch_size,max_enc_steps)
-          masked_e = nn_ops.softmax(e_not_masked) * enc_padding_mask # (batch_size, max_enc_steps)
+          masked_e = nn_ops.softmax(e_not_masked) * enc_padding_mask_f # (batch_size, max_enc_steps)
           masked_sums = tf.reduce_sum(masked_e, axis=1) # shape (batch_size)
           masked_e = masked_e / tf.reshape(masked_sums, [-1, 1])
           # Equation 3 in 
@@ -224,11 +234,11 @@ def attention_decoder(_hps,
             _enc_states_lst = tf.unstack(tf.squeeze(_enc_states,axis=2),axis=0) # batch_size * (max_enc_steps, attention_vec_size)
 
             e_not_masked = tf.squeeze(tf.stack([tf.matmul(tf.reshape(_dec,[1,-1]), tf.transpose(_enc)) for _dec, _enc in zip(_dec_attn,_enc_states_lst)]),axis=1) # (batch_size, max_enc_steps)
-            masked_e = tf.exp(e_not_masked * enc_padding_mask) # (batch_size, max_enc_steps)
+            masked_e = tf.exp(e_not_masked * enc_padding_mask_f) # (batch_size, max_enc_steps)
           else:
             # Calculate v^T tanh(W_h h_i + W_s s_t + b_attn)
             e_not_masked = math_ops.reduce_sum(v * math_ops.tanh(encoder_features + decoder_features), [2, 3]) # calculate e, (batch_size, max_enc_steps)
-            masked_e = nn_ops.softmax(e_not_masked) * enc_padding_mask # (batch_size, max_enc_steps)
+            masked_e = nn_ops.softmax(e_not_masked) * enc_padding_mask_f # (batch_size, max_enc_steps)
             masked_sums = tf.reduce_sum(masked_e, axis=1) # shape (batch_size)
             masked_e = masked_e / tf.reshape(masked_sums, [-1, 1])
           if _hps.use_temporal_attention:
@@ -313,6 +323,8 @@ def attention_decoder(_hps,
     greedy_rewards = [] # list of size max_dec_steps (batch_size, k)
     state = _dec_in_state
     coverage = prev_coverage # initialize coverage to None or whatever was passed in
+    #print(batch_size)
+    #print(attn_size)
     context_vector = array_ops.zeros([batch_size, attn_size])
     context_decoder_vector = array_ops.zeros([batch_size, decoder_attn_size])
     context_vector.set_shape([None, attn_size])  # Ensure the second shape of attention vectors is set.

@@ -19,6 +19,7 @@ try:
   import queue
 except:
   import Queue as queue
+import sys
 from random import shuffle
 from random import seed
 seed(123)
@@ -28,18 +29,30 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub
 import bert
-from bert import run_classifier
+#from bert import run_classifier
+if not '/scratch/tb1420/NLU/text_summarization/src/bert' in sys.path:
+  sys.path += ['/scratch/tb1420/NLU/text_summarization/src/bert']
+from bert import modeling
 from bert import optimization
 from bert import tokenization
+import run_classifier_with_tfhub
 import data
 
 FLAGS = tf.app.flags.FLAGS
 
+# <s> and </s> are used in the data files to segment the abstracts into sentences. They don't receive vocab ids.
+SENTENCE_START = '<s>'
+SENTENCE_END = '</s>'
 
-BERT_MODEL = 'uncased_L-12_H-768_A-12'
-BERT_MODEL_HUB = 'https://tfhub.dev/google/bert_' + BERT_MODEL + '/1'
+PAD_TOKEN = '[PAD]' # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence
+UNKNOWN_TOKEN = '[UNK]' # This has a vocab id, which is used to represent out-of-vocabulary words
+START_DECODING = '[CLS]' # This has a vocab id, which is used at the start of every decoder input sequence
+STOP_DECODING = '[SEP]' # This has a vocab id, which is used at the end of untruncated target sequences
 
-tokenizer = run_classifier_with_tfhub.create_tokenizer_from_hub_module(BERT_MODEL_HUB)
+#BERT_MODEL = 'uncased_L-12_H-768_A-12'
+#BERT_MODEL_HUB = 'https://tfhub.dev/google/bert_' + BERT_MODEL + '/1'
+
+#tokenizer = run_classifier_with_tfhub.create_tokenizer_from_hub_module(BERT_MODEL_HUB)
 
 
 class Example(object):
@@ -71,25 +84,25 @@ class Example(object):
     unk_id = tokenizer.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
     for w in article_words:
       try:
-        i = tokenizer.convert_tokens_to_ids([w])[0]:
-        enc_input.append(i)
+        i = tokenizer.convert_tokens_to_ids([w])[0]
+        self.enc_input.append(i)
       except:
-        enc_input.append(unk_id)
+        self.enc_input.append(unk_id)
     self.enc_input = tokenizer.convert_tokens_to_ids(['[CLS]'])+self.enc_input+tokenizer.convert_tokens_to_ids(['[SEP]'])
     #self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
-
+    #print("enc_input_in_ex:", self.enc_input)
     # Process the abstract
     abstract = ' '.join(abstract_sentences) # string
     abstract_words = abstract.split() # list of strings
     #abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
-    abd_ids = []
+    abs_ids = []
 
     for w in abstract_words:
       try:
-        i = tokenizer.convert_tokens_to_ids([w])[0]:
-        abd_ids.append(i)
+        i = tokenizer.convert_tokens_to_ids([w])[0]
+        abs_ids.append(i)
       except:
-        abd_ids.append(unk_id)
+        abs_ids.append(unk_id)
         
     # Get the decoder input sequence and target sequence
     self.dec_input, self.target = self.get_dec_inp_targ_seqs(abs_ids, hps.max_dec_steps, start_decoding, stop_decoding)
@@ -208,6 +221,7 @@ class Batch(object):
 
     # Fill in the numpy arrays
     for i, ex in enumerate(example_list):
+      #print("ex_enc_input:",ex.enc_input[:])
       self.enc_batch[i, :] = ex.enc_input[:]
       self.enc_lens[i] = ex.enc_len
       for j in range(ex.enc_len):

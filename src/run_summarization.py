@@ -18,6 +18,7 @@
 
 import time
 import os
+import sys
 import tensorflow as tf
 from collections import namedtuple
 from data import Vocab
@@ -38,9 +39,13 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.distributions import bernoulli
 import tensorflow_hub as hub
 import bert
-from bert import run_classifier
+#from bert import run_classifier
+if not '/scratch/tb1420/NLU/text_summarization/src/bert' in sys.path:
+  sys.path += ['/scratch/tb1420/NLU/text_summarization/src/bert']
+from bert import modeling
 from bert import optimization
 from bert import tokenization
+import run_classifier_with_tfhub
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -65,15 +70,15 @@ tf.app.flags.DEFINE_integer('bucketing_cache_size', 100, 'Number of bucketing ca
 
 # Hyperparameters
 tf.app.flags.DEFINE_integer('enc_hidden_dim', 768, 'dimension of RNN hidden states')
-tf.app.flags.DEFINE_integer('dec_hidden_dim', 768, 'dimension of RNN hidden states')
-tf.app.flags.DEFINE_integer('emb_dim', 128, 'dimension of word embeddings')
-tf.app.flags.DEFINE_integer('batch_size', 64, 'minibatch size')
-tf.app.flags.DEFINE_integer('max_enc_steps', 400, 'max timesteps of encoder (max source text tokens)')
+tf.app.flags.DEFINE_integer('dec_hidden_dim', 256, 'dimension of RNN hidden states')
+tf.app.flags.DEFINE_integer('emb_dim', 768, 'dimension of word embeddings')
+tf.app.flags.DEFINE_integer('batch_size', 12, 'minibatch size')
+tf.app.flags.DEFINE_integer('max_enc_steps', 384, 'max timesteps of encoder (max source text tokens)')
 tf.app.flags.DEFINE_integer('max_dec_steps', 100, 'max timesteps of decoder (max summary tokens)')
 tf.app.flags.DEFINE_integer('beam_size', 4, 'beam size for beam search decoding.')
 tf.app.flags.DEFINE_integer('min_dec_steps', 35, 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
 tf.app.flags.DEFINE_integer('max_iter', 55000, 'max number of iterations')
-tf.app.flags.DEFINE_integer('vocab_size', 50000, 'Size of vocabulary. These will be read from the vocabulary file in order. If the vocabulary file contains fewer words than this number, or if this number is set to 0, will take all words in the vocabulary file.')
+tf.app.flags.DEFINE_integer('vocab_size', 30522, 'Size of vocabulary. These will be read from the vocabulary file in order. If the vocabulary file contains fewer words than this number, or if this number is set to 0, will take all words in the vocabulary file.')
 tf.app.flags.DEFINE_float('lr', 0.15, 'learning rate')
 tf.app.flags.DEFINE_float('adagrad_init_acc', 0.1, 'initial accumulator value for Adagrad')
 tf.app.flags.DEFINE_float('rand_unif_init_mag', 0.02, 'magnitude for lstm cells random uniform inititalization')
@@ -380,6 +385,9 @@ class Seq2Seq(object):
     tf.logging.info('Starting Seq2Seq training...')
     while True: # repeats until interrupted
       batch = self.batcher.next_batch()
+      #print("enc_batch:", batch.enc_batch)
+      
+      
       t0=time.time()
       if FLAGS.ac_training:
         # For DDQN, we first collect the model output to calculate the reward and Q-estimates

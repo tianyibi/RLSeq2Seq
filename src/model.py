@@ -73,7 +73,8 @@ class SummarizationModel(object):
     self._enc_batch = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch')
     self._enc_segment = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_segment')
     self._enc_lens = tf.placeholder(tf.int32, [hps.batch_size], name='enc_lens')
-    self._enc_padding_mask = tf.placeholder(tf.float32, [hps.batch_size, None], name='enc_padding_mask')
+    #self._enc_padding_mask = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_padding_mask')
+    self._enc_padding_mask = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_padding_mask')
     self._eta = tf.placeholder(tf.float32, None, name='eta')
     if FLAGS.embedding:
       self.embedding_place = tf.placeholder(tf.float32, [len(self._vocab.vocab), hps.emb_dim])
@@ -122,14 +123,25 @@ class SummarizationModel(object):
 
   def _encode_with_bert(self, input_ids, segment_ids, input_mask):
     with tf.variable_scope('encoder'):
+      #print(input_ids)
+      #print(input_ids.shape)
+      #print(segment_ids.shape)
+      #print(input_mask.shape)
       bert_inputs = dict(
           input_ids=input_ids,
           input_mask=input_mask,
           segment_ids=segment_ids)
       bert_outputs = self.bert_encoder(inputs=bert_inputs, signature="tokens", as_dict=True)
-      encoder_outputs = bert_outpus['sequence_output']
-      encoder_last_hidden = bert_outpus['pooled_output']
-    return encoder_outputs, encoder_last_hidden
+      encoder_outputs = bert_outputs['sequence_output']
+      encoder_last_hidden = tf.expand_dims(encoder_outputs[:, -1, :], axis = 1)
+      
+      #print(encoder_last_hidden.shape)
+      cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+      cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+      (lstm_encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_last_hidden, dtype=tf.float32, swap_memory=True)
+      #print(encoder_outputs.shape)
+      #print(fw_st.c.get_shape())
+    return encoder_outputs, fw_st, bw_st
 
 
 
@@ -196,7 +208,7 @@ class SummarizationModel(object):
     """
     hps = self._hps
     cell = tf.contrib.rnn.LSTMCell(hps.dec_hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
-
+    
     prev_coverage = self.prev_coverage if (hps.mode=="decode" and hps.coverage) else None # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's coverage vector each time
     prev_decoder_outputs = self.prev_decoder_outputs if (hps.intradecoder and hps.mode=="decode") else tf.stack([],axis=0)
     prev_encoder_es = self.prev_encoder_es if (hps.use_temporal_attention and hps.mode=="decode") else tf.stack([],axis=0)
@@ -265,7 +277,7 @@ class SummarizationModel(object):
       # Some initializers
       self.rand_unif_init = tf.random_uniform_initializer(-hps.rand_unif_init_mag, hps.rand_unif_init_mag, seed=123)
       self.trunc_norm_init = tf.truncated_normal_initializer(stddev=hps.trunc_norm_init_std)
-
+      
       # Add embedding matrix (shared by the encoder and decoder inputs)
       #with tf.variable_scope('embedding'):
       #  if FLAGS.embedding:
@@ -275,19 +287,20 @@ class SummarizationModel(object):
       #  if hps.mode=="train": self._add_emb_vis(embedding) # add to tensorboard
       #  emb_enc_inputs = tf.nn.embedding_lookup(embedding, self._enc_batch) # tensor with shape (batch_size, max_enc_steps, emb_size)
       #  emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
-
+      
       embedding = self.bert_encoder.variable_map['bert/embeddings/word_embeddings']
       emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] 
-
+      
       # Add the encoder.
       #enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens)
       #enc_outputs, fw_st, bw_st = self._encode_with_bert(self._enc_batch,self._enc_segment, self._enc_padding_mask)
-      enc_outputs, enc_last_hidden = self._encode_with_bert(self._enc_batch,self._enc_segment, self._enc_padding_mask)
+      enc_outputs, fw_st, bw_st = self._encode_with_bert(self._enc_batch,self._enc_segment, self._enc_padding_mask)
+      #print(enc_outputs.get_shape())
       self._enc_states = enc_outputs
-
+      
       # Our encoder is bidirectional and our decoder is unidirectional so we need to reduce the final encoder hidden state to the right size to be the initial decoder hidden state
-      #self._dec_in_state = self._reduce_states(fw_st, bw_st)
-      self._dec_in_state = enc_last_hidden
+      self._dec_in_state = self._reduce_states(fw_st, bw_st)
+      #self._dec_in_state = enc_last_hidden
 
       # Add the decoder.
       with tf.variable_scope('decoder'):
