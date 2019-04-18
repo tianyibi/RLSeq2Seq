@@ -82,6 +82,9 @@ tf.app.flags.DEFINE_boolean('pointer_gen', True, 'If True, use pointer-generator
 tf.app.flags.DEFINE_boolean('avoid_trigrams', True, 'Avoids trigram during decoding')
 tf.app.flags.DEFINE_boolean('share_decoder_weights', False, 'Share output matrix projection with word embedding') # Eq 13. in https://arxiv.org/pdf/1705.04304.pdf
 
+#Bert encoder or not
+tf.app.flags.DEFINE_boolean('bert', False, 'If ture, use bert as the encoder')
+
 # Pointer-generator with Self-Critic policy gradient: https://arxiv.org/pdf/1705.04304.pdf
 tf.app.flags.DEFINE_boolean('rl_training', False, 'Use policy-gradient training by collecting rewards at the end of sequence.')
 tf.app.flags.DEFINE_boolean('self_critic', True, 'Uses greedy sentence reward as baseline.')

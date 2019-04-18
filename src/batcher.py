@@ -57,25 +57,27 @@ class Example(object):
     self.hps = hps
 
     # Get ids of special tokens
-    #start_decoding = vocab.word2id(data.START_DECODING)
-    #stop_decoding = vocab.word2id(data.STOP_DECODING)
-    start_decoding = tokenizer.convert_tokens_to_ids([data.START_DECODING])[0]
-    stop_decoding = tokenizer.convert_tokens_to_ids([data.STOP_DECODING])[0]
+    start_decoding = vocab.word2id(data.START_DECODING)
+    stop_decoding = vocab.word2id(data.STOP_DECODING)
+    # start_decoding = tokenizer.convert_tokens_to_ids([data.START_DECODING])[0]
+    # stop_decoding = tokenizer.convert_tokens_to_ids([data.STOP_DECODING])[0]
 
     # Process the article
     article_words = article.split()
     if len(article_words) > hps.max_enc_steps:
       article_words = article_words[:hps.max_enc_steps]
     self.enc_len = len(article_words)+2 # store the length after truncation but before padding
+    article_words = [i if i in tokenizer.vocab else '[UNK]' for i in article_words]
     self.enc_input = tokenizer.convert_tokens_to_ids(['[CLS]']+article_words+['[SEP]'])
+
     #self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
 
     # Process the abstract
     abstract = ' '.join(abstract_sentences) # string
     abstract_words = abstract.split() # list of strings
-    #abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
+    abs_ids = [vocab.word2id(w) for w in abstract_words] # list of word ids; OOVs are represented by the id for UNK token
 
-    abs_ids = tokenizer.convert_tokens_to_ids(['[CLS]']+abstract_words+['[SEP]'])
+    #abs_ids = tokenizer.convert_tokens_to_ids(['[CLS]']+abstract_words+['[SEP]'])
 
     # Get the decoder input sequence and target sequence
     self.dec_input, self.target = self.get_dec_inp_targ_seqs(abs_ids, hps.max_dec_steps, start_decoding, stop_decoding)

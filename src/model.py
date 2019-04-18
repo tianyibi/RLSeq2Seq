@@ -27,8 +27,12 @@ from rouge import rouge
 from rouge_tensor import rouge_l_fscore
 import data
 from replay_buffer import Transition
+import tensorflow_hub as hub
+
+
 
 FLAGS = tf.app.flags.FLAGS
+BERT_MODEL_HUB = "https://tfhub.dev/google/bert_uncased_L-12_H-768_A-12/1"
 
 class SummarizationModel(object):
   """A class to represent a sequence-to-sequence model for text summarization. Supports both baseline mode, pointer-generator mode, and coverage"""
@@ -117,7 +121,7 @@ class SummarizationModel(object):
       feed_dict[self._dec_padding_mask] = batch.dec_padding_mask
     return feed_dict
 
-  def _add_encoder(self, emb_enc_inputs, seq_len):
+  def _add_encoder(self, emb_enc_inputs, seq_len, enc_inputs):
     """Add a single-layer bidirectional LSTM encoder to the graph.
 
     Args:
@@ -131,10 +135,21 @@ class SummarizationModel(object):
         Each are LSTMStateTuples of shape ([batch_size,hidden_dim],[batch_size,hidden_dim])
     """
     with tf.variable_scope('encoder'):
-      cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
-      cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
-      (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, emb_enc_inputs, dtype=tf.float32, sequence_length=seq_len, swap_memory=True)
-      encoder_outputs = tf.concat(axis=2, values=encoder_outputs) # concatenate the forwards and backwards states
+      if FLAGS.bert:
+        bert_module = hub.Module(BERT_MODEL_HUB, trainable=True)
+        input_mask = tf.zeros_like(enc_inputs)
+        for i, lens in enumerate(seq_len):
+          input_mask[i,:lens] = 1
+        segment_ids = tf.zeros_like(enc_inputs)
+        bert_inputs = dict(input_ids= enc_inputs, input_mask=input_mask, segment_ids=segment_ids)
+        bert_outputs = bert_module(inputs=bert_inputs, signature="tokens", as_dict=True)
+        encoder_outputs = bert_outputs['sequence_output']
+        fw_st, bw_st = bert_outputs['pooled_output'], bert_outputs['pooled_output'] #both hidden state and bw states are bert outputs, may change
+      else:  
+        cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+        cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
+        (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, emb_enc_inputs, dtype=tf.float32, sequence_length=seq_len, swap_memory=True)
+        encoder_outputs = tf.concat(axis=2, values=encoder_outputs) # concatenate the forwards and backwards states
     return encoder_outputs, fw_st, bw_st
 
   def _reduce_states(self, fw_st, bw_st):
@@ -261,7 +276,7 @@ class SummarizationModel(object):
         emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
 
       # Add the encoder.
-      enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens)
+      enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens, self._enc_batch)
       self._enc_states = enc_outputs
 
       # Our encoder is bidirectional and our decoder is unidirectional so we need to reduce the final encoder hidden state to the right size to be the initial decoder hidden state
