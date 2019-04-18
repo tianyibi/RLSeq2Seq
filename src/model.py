@@ -121,7 +121,7 @@ class SummarizationModel(object):
       feed_dict[self._dec_padding_mask] = batch.dec_padding_mask
     return feed_dict
 
-  def _add_encoder(self, emb_enc_inputs, seq_len, enc_inputs):
+  def _add_encoder(self, emb_enc_inputs, seq_len, enc_inputs, input_mask):
     """Add a single-layer bidirectional LSTM encoder to the graph.
 
     Args:
@@ -137,9 +137,6 @@ class SummarizationModel(object):
     with tf.variable_scope('encoder'):
       if FLAGS.bert:
         bert_module = hub.Module(BERT_MODEL_HUB, trainable=True)
-        input_mask = tf.zeros_like(enc_inputs)
-        for i, lens in enumerate(seq_len):
-          input_mask[i,:lens] = 1
         segment_ids = tf.zeros_like(enc_inputs)
         bert_inputs = dict(input_ids= enc_inputs, input_mask=input_mask, segment_ids=segment_ids)
         bert_outputs = bert_module(inputs=bert_inputs, signature="tokens", as_dict=True)
@@ -276,7 +273,7 @@ class SummarizationModel(object):
         emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
 
       # Add the encoder.
-      enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens, self._enc_batch)
+      enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens, self._enc_batch, self._enc_padding_mask)
       self._enc_states = enc_outputs
 
       # Our encoder is bidirectional and our decoder is unidirectional so we need to reduce the final encoder hidden state to the right size to be the initial decoder hidden state
