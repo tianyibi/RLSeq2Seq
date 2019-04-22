@@ -166,7 +166,7 @@ class SummarizationModel(object):
     with tf.variable_scope('reduce_final_st'):
 
       # Define weights and biases to reduce the cell and reduce the state
-      reduce_first_dim = 764 if FLAGS.bert else enc_hidden_dim*2
+      reduce_first_dim = 768 if FLAGS.bert else enc_hidden_dim*2
       w_reduce_c = tf.get_variable('w_reduce_c', [reduce_first_dim, dec_hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
       w_reduce_h = tf.get_variable('w_reduce_h', [reduce_first_dim, dec_hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
       bias_reduce_c = tf.get_variable('bias_reduce_c', [dec_hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
