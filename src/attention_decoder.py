@@ -136,6 +136,8 @@ def attention_decoder(_hps,
   """
   with variable_scope.variable_scope("attention_decoder") as scope:
     batch_size = _enc_states.get_shape()[0] # if this line fails, it's because the batch size isn't defined
+    tf.logging.info('finished this line!')
+    tf.logging.info('batch_size is' + str(batch_size))
     attn_size = _enc_states.get_shape()[2] # if this line fails, it's because the attention length isn't defined
     emb_size = emb_dec_inputs[0].get_shape()[1] # if this line fails, it's because the embedding isn't defined
     decoder_attn_size = _dec_in_state.c.get_shape()[1]
@@ -313,9 +315,9 @@ def attention_decoder(_hps,
     greedy_rewards = [] # list of size max_dec_steps (batch_size, k)
     state = _dec_in_state
     coverage = prev_coverage # initialize coverage to None or whatever was passed in
-    context_vector = array_ops.zeros([10, 10])
-    context_vector = array_ops.zeros([batch_size, 10])
-    context_vector = array_ops.zeros([10, attn_size])
+    tf.logging.info('Batch size is' + str(batch_size))
+    tf.logging.info('attention size is' + str(attn_size))
+    try_vector = array_ops.zeros([_hps.batch_size, attn_size])
     context_vector = array_ops.zeros([batch_size, attn_size])
     context_decoder_vector = array_ops.zeros([batch_size, decoder_attn_size])
     context_vector.set_shape([None, attn_size])  # Ensure the second shape of attention vectors is set.
