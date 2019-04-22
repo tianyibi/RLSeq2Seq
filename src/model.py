@@ -141,7 +141,9 @@ class SummarizationModel(object):
         bert_inputs = dict(input_ids= enc_inputs, input_mask=input_mask, segment_ids=segment_ids)
         bert_outputs = bert_module(inputs=bert_inputs, signature="tokens", as_dict=True)
         encoder_outputs = bert_outputs['sequence_output']
-        fw_st, bw_st = bert_outputs['pooled_output'], bert_outputs['pooled_output'] #both hidden state and bw states are bert outputs, may change
+        fw_st = tf.contrib.rnn.LSTMStateTuple(bert_outputs['pooled_output'], bert_outputs['pooled_output']) #both hidden state and bw states are bert outputs, may change
+        bw_st = tf.contrib.rnn.LSTMStateTuple(bert_outputs['pooled_output'], bert_outputs['pooled_output'])
+
       else:  
         cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
         cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
@@ -171,6 +173,7 @@ class SummarizationModel(object):
       bias_reduce_h = tf.get_variable('bias_reduce_h', [dec_hidden_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
 
       # Apply linear layer
+
       old_c = tf.concat(axis=1, values=[fw_st.c, bw_st.c]) # Concatenation of fw and bw cell
       old_h = tf.concat(axis=1, values=[fw_st.h, bw_st.h]) # Concatenation of fw and bw state
       new_c = tf.nn.relu(tf.matmul(old_c, w_reduce_c) + bias_reduce_c) # Get new cell from old cell
