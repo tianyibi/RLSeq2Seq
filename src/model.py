@@ -277,9 +277,6 @@ class SummarizationModel(object):
 
       # Add the encoder.
       enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens, self._enc_batch, tf.cast(self._enc_padding_mask,tf.int32))
-      tf.logging.info('here we are adding encoder!')
-      tf.logging.info('enc_outputs shape is ' + str(enc_outputs.shape))
-      tf.logging.info('enc inputs shape is ' + str(emb_enc_inputs.shape))
       self._enc_states = enc_outputs
 
       # Our encoder is bidirectional and our decoder is unidirectional so we need to reduce the final encoder hidden state to the right size to be the initial decoder hidden state

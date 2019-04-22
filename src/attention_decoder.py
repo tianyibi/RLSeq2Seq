@@ -135,9 +135,8 @@ def attention_decoder(_hps,
     temporal_e: contains temporal attention.
   """
   with variable_scope.variable_scope("attention_decoder") as scope:
-    batch_size = _enc_states.get_shape()[0] # if this line fails, it's because the batch size isn't defined
-    tf.logging.info('finished this line!')
-    tf.logging.info('batch_size is' + str(batch_size))
+    #batch_size = _enc_states.get_shape()[0] # if this line fails, it's because the batch size isn't defined
+    batch_size = _hps.batch_size
     attn_size = _enc_states.get_shape()[2] # if this line fails, it's because the attention length isn't defined
     emb_size = emb_dec_inputs[0].get_shape()[1] # if this line fails, it's because the embedding isn't defined
     decoder_attn_size = _dec_in_state.c.get_shape()[1]
