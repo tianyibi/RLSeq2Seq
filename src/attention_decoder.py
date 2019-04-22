@@ -312,8 +312,9 @@ def attention_decoder(_hps,
     sampling_rewards = [] # list of size max_dec_steps (batch_size, k)
     greedy_rewards = [] # list of size max_dec_steps (batch_size, k)
     state = _dec_in_state
-    try_vector = array_ops.zeros([batch_size, attn_size])
     coverage = prev_coverage # initialize coverage to None or whatever was passed in
+    context_vector = array_ops.zeros([batch_size, 10])
+    context_vector = array_ops.zeros([10, attn_size])
     context_vector = array_ops.zeros([batch_size, attn_size])
     context_decoder_vector = array_ops.zeros([batch_size, decoder_attn_size])
     context_vector.set_shape([None, attn_size])  # Ensure the second shape of attention vectors is set.
