@@ -315,8 +315,6 @@ def attention_decoder(_hps,
     greedy_rewards = [] # list of size max_dec_steps (batch_size, k)
     state = _dec_in_state
     coverage = prev_coverage # initialize coverage to None or whatever was passed in
-    tf.logging.info('Batch size is' + str(batch_size))
-    tf.logging.info('attention size is' + str(attn_size))
     try_vector = array_ops.zeros([_hps.batch_size, attn_size])
     context_vector = array_ops.zeros([batch_size, attn_size])
     context_decoder_vector = array_ops.zeros([batch_size, decoder_attn_size])
