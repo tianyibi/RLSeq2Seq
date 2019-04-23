@@ -84,6 +84,8 @@ tf.app.flags.DEFINE_boolean('share_decoder_weights', False, 'Share output matrix
 
 #Bert encoder or not
 tf.app.flags.DEFINE_boolean('bert', False, 'If ture, use bert as the encoder')
+tf.app.flags.DEFINE_boolean('bert_finetune', False, 'If true, finetune bert')
+tf.app.flags.DEFINE_integer('finetune_since',10,'since which layer to finetune')
 
 # Pointer-generator with Self-Critic policy gradient: https://arxiv.org/pdf/1705.04304.pdf
 tf.app.flags.DEFINE_boolean('rl_training', False, 'Use policy-gradient training by collecting rewards at the end of sequence.')

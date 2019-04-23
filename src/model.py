@@ -453,9 +453,14 @@ class SummarizationModel(object):
       if self._hps.coverage:
         loss_to_minimize = self._pointer_cov_total_loss
 
-    init_tvars = tf.trainable_variables()
+    tvars = tf.trainable_variables()
     #if we want to fine-tune variables, we can eliminate the variables here, finetune layer_10, layer_11 and pooler
-    tvars = [i for i in init_tvars if (('module/bert' not in i.name) or ('layer_10' in i.name) or ('layer_11' in i.name) or ('pooler' in i.name))]
+    if self._hps.bert and self._hps.bert_finetune:
+      tvars_to_remove = [i.name for i in tvars if (('module/bert' in i.name) and (any('layer_'+str(j) + '/' in i.name for j in range(self._hps.finetune_since)) 
+        or ('bert/embeddings' in i.name)))]
+      tvars = [i for i in tvars if i.name not in tvars_to_remove]
+
+    tf.logging.info('the length of tvars is ' + str(len(tvars)))
 
     gradients = tf.gradients(loss_to_minimize, tvars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
 
