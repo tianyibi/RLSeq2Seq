@@ -455,8 +455,8 @@ class SummarizationModel(object):
 
     tvars = tf.trainable_variables()
     #if we want to fine-tune variables, we can eliminate the variables here, finetune layer_10, layer_11 and pooler
-    if self._hps.bert and self._hps.bert_finetune:
-      tvars_to_remove = [i.name for i in tvars if (('module/bert' in i.name) and (any('layer_'+str(j) + '/' in i.name for j in range(self._hps.finetune_since)) 
+    if FLAGS.bert and FLAGS.bert_finetune:
+      tvars_to_remove = [i.name for i in tvars if (('module/bert' in i.name) and (any('layer_'+str(j) + '/' in i.name for j in range(FLAGS.finetune_since)) 
         or ('bert/embeddings' in i.name)))]
       tvars = [i for i in tvars if i.name not in tvars_to_remove]
 
