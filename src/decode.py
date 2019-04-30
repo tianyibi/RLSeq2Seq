@@ -60,9 +60,11 @@ class BeamSearchDecoder(object):
         _ = util.load_dqn_ckpt(self._dqn_saver, self._dqn_sess)
 
     # Load an initial checkpoint to use for decoding
+    tf.logging('here we try to print things')
     ckpt_path = util.load_ckpt(self._saver, self._sess, FLAGS.decode_from)
 
     if FLAGS.single_pass:
+      tf.logging('Yes we begined single-pass !')
       # Make a descriptive decode directory name
       ckpt_name = "{}-ckpt-".format(FLAGS.decode_from) + ckpt_path.split('-')[
         -1]  # this is something of the form "ckpt-123456"
@@ -72,6 +74,7 @@ class BeamSearchDecoder(object):
 
     # Make the decode dir if necessary
     if not os.path.exists(self._decode_dir): os.mkdir(self._decode_dir)
+    tf.logging('the decode directory is' + self._decode_dir)
 
     if FLAGS.single_pass:
       # Make the dirs to contain output written in the correct format for pyrouge
