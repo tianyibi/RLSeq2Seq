@@ -49,6 +49,8 @@ import run_classifier_with_tfhub
 
 FLAGS = tf.app.flags.FLAGS
 
+
+tf.app.flags.DEFINE_integer('finetune_since',10,'since which layer to finetune')
 # Where to find data
 tf.app.flags.DEFINE_string('data_path', '', 'Path expression to tf.Example datafiles. Can include wildcards to access multiple datafiles.')
 tf.app.flags.DEFINE_string('vocab_path', '', 'Path expression to text vocabulary file.')
@@ -774,7 +776,7 @@ class Seq2Seq(object):
     elif self.hps.mode == 'decode':
       decode_model_hps = self.hps  # This will be the hyperparameters for the decoder model
       decode_model_hps = self.hps._replace(max_dec_steps=1) # The model is configured with max_dec_steps=1 because we only ever run one step of the decoder at a time (to do beam search). Note that the batcher is initialized with max_dec_steps equal to e.g. 100 because the batches need to contain the full summaries
-      model = SummarizationModel(decode_model_hps, self.vocab)
+      model = SummarizationModel(decode_model_hps, self.vocab, self.bert_encoder)
       if FLAGS.ac_training:
         # We need our target DDQN network for collecting Q-estimation at each decoder step.
         dqn_target = DQN(self.dqn_hps,'target')

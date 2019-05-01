@@ -133,9 +133,10 @@ class SummarizationModel(object):
           segment_ids=segment_ids)
       bert_outputs = self.bert_encoder(inputs=bert_inputs, signature="tokens", as_dict=True)
       encoder_outputs = bert_outputs['sequence_output']
-      encoder_last_hidden = tf.expand_dims(encoder_outputs[:, -1, :], axis = 1)
-      
-      #print(encoder_last_hidden.shape)
+      #encoder_last_hidden = tf.expand_dims(encoder_outputs[:, -1, :], axis = 1)
+      # encoder last output
+      encoder_last_hidden = tf.expand_dims(bert_outputs['pooled_output'], axis=1)
+      print(encoder_last_hidden.shape)
       cell_fw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
       cell_bw = tf.contrib.rnn.LSTMCell(self._hps.enc_hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
       (lstm_encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_last_hidden, dtype=tf.float32, swap_memory=True)
@@ -474,6 +475,11 @@ class SummarizationModel(object):
         loss_to_minimize = self._pointer_cov_total_loss
 
     tvars = tf.trainable_variables()
+    tvars_to_remove = [i.name for i in tvars if (('module/bert' in i.name) and (any('layer_'+str(j) + '/' in i.name for j in range(FLAGS.finetune_since)) 
+        or ('bert/embeddings' in i.name)))]
+    tvars = [i for i in tvars if i.name not in tvars_to_remove]
+    
+    tf.logging.info('the length of tvars is ' + str(len(tvars)))
     gradients = tf.gradients(loss_to_minimize, tvars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
 
     # Clip the gradients
