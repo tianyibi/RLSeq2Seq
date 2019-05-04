@@ -278,14 +278,14 @@ def outputids2words(id_list, vocab, article_oovs):
     try:
       w = vocab.convert_ids_to_tokens([i])[0]
       #w = vocab.id2word(i) # might be [UNK]
-    except ValueError as e: # w is OOV
+    except KeyError as e: # w is OOV
       assert article_oovs is not None, "Error: model produced a word ID that isn't in the vocabulary. This should not happen in baseline (no pointer-generator) mode"
       article_oov_idx = i - len(vocab.vocab)
       try:
         w = article_oovs[article_oov_idx]
       except ValueError as e: # i doesn't correspond to an article oov
         raise ValueError('Error: model produced word ID %i which corresponds to article OOV %i but this example only has %i article OOVs' % (i, article_oov_idx, len(article_oovs)))
-    words.append(w)
+    words.append(str(w))
   return words
 
 
@@ -318,7 +318,7 @@ def show_art_oovs(article, vocab):
   #unk_token = vocab.word2id(UNKNOWN_TOKEN)
   unk_token = vocab.convert_tokens_to_ids([UNKNOWN_TOKEN])[0]
   words = article.split(' ')
-  words = [("__%s__" % w) if vocab.convert_tokens_to_ids([w])[0]==unk_token else w for w in words]
+  #words = [("__%s__" % w) if vocab.convert_tokens_to_ids([w])[0]==unk_token else w for w in words]
   for (i, w) in enumerate(words):
     try:
       id_b = vocab.convert_tokens_to_ids([w])[0]
