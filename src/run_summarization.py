@@ -768,7 +768,7 @@ class Seq2Seq(object):
         self.dqn_target = DQN(self.dqn_hps,'target')
       self.setup_training()
     elif self.hps.mode == 'eval':
-      self.model = SummarizationModel(self.hps, self.vocab)
+      self.model = SummarizationModel(self.hps, self.vocab, self.bert_encoder)
       if FLAGS.ac_training:
         self.dqn = DQN(self.dqn_hps,'current')
         self.dqn_target = DQN(self.dqn_hps,'target')
